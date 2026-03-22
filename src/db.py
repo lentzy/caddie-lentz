@@ -211,3 +211,85 @@ def get_hole_scores(client: Client, round_id: str) -> list[dict]:
 def get_hole_score(client: Client, hole_score_id: str) -> dict | None:
     result = client.table("hole_scores").select("*").eq("id", hole_score_id).execute()
     return result.data[0] if result.data else None
+
+
+# ─────────────────────────────────────────────
+# SHOTS
+# ─────────────────────────────────────────────
+
+def create_shot(
+    client: Client,
+    hole_score_id: str,
+    shot_number: int,
+    distance_to_hole: int | None,
+    club: str,
+    shot_type: str,
+    lie: str,
+    contact: list[str],
+    miss_direction: str | None,
+    outcome: str,
+    penalty_reason: str | None,
+    distance_hit: int | None = None,
+) -> dict:
+    result = client.table("shots").insert({
+        "hole_score_id": hole_score_id,
+        "shot_number": shot_number,
+        "distance_to_hole": distance_to_hole,
+        "club": club,
+        "shot_type": shot_type,
+        "lie": lie,
+        "contact": contact,
+        "miss_direction": miss_direction,
+        "outcome": outcome,
+        "penalty_reason": penalty_reason,
+        "distance_hit": distance_hit,
+    }).execute()
+    return result.data[0]
+
+
+def get_shots(client: Client, hole_score_id: str) -> list[dict]:
+    return (
+        client.table("shots")
+        .select("*")
+        .eq("hole_score_id", hole_score_id)
+        .order("shot_number")
+        .execute()
+        .data
+    )
+
+
+def update_shot(client: Client, shot_id: str, **kwargs) -> dict:
+    result = client.table("shots").update(kwargs).eq("id", shot_id).execute()
+    return result.data[0]
+
+
+def delete_shot(client: Client, shot_id: str):
+    client.table("shots").delete().eq("id", shot_id).execute()
+
+
+def delete_shots_for_hole(client: Client, hole_score_id: str):
+    client.table("shots").delete().eq("hole_score_id", hole_score_id).execute()
+
+
+# ─────────────────────────────────────────────
+# USER BAG
+# ─────────────────────────────────────────────
+
+def get_user_bag(client: Client, user_id: str) -> list[str]:
+    """Return list of club names in the user's bag."""
+    result = (
+        client.table("user_bag")
+        .select("club")
+        .eq("user_id", user_id)
+        .order("club")
+        .execute()
+    )
+    return [row["club"] for row in result.data]
+
+
+def set_user_bag(client: Client, user_id: str, clubs: list[str]):
+    """Replace the user's entire bag with the given club list."""
+    client.table("user_bag").delete().eq("user_id", user_id).execute()
+    if clubs:
+        rows = [{"user_id": user_id, "club": club} for club in clubs]
+        client.table("user_bag").insert(rows).execute()
