@@ -1,6 +1,93 @@
 # pages/1_Dashboard.py
 import streamlit as st
-from src.auth import require_auth
+import pandas as pd
+import plotly.express as px
+from src.auth import require_auth, get_current_user_id, get_supabase_client
+from src.db import get_rounds, get_hole_scores, get_in_progress_round
+from src.analytics import compute_user_metrics, build_focus_area_cards, METRIC_DISPLAY_NAMES
+from src.constants import BENCHMARKS
+
 require_auth()
+
 st.title("Dashboard")
-st.info("Coming soon.")
+
+client = get_supabase_client()
+user_id = get_current_user_id()
+
+# ── In-Progress Round Banner ──────────────────
+in_progress = get_in_progress_round(client, user_id)
+if in_progress:
+    course_name = in_progress.get("courses", {}).get("name", "Unknown Course")
+    st.warning(f"Round in progress: **{course_name}** on {in_progress['date']}")
+    if st.button("Continue Round"):
+        st.session_state["active_round_id"] = in_progress["id"]
+        st.switch_page("pages/2_New_Round.py")
+
+# ── Load data ──────────────────────────────────
+rounds = get_rounds(client, user_id, status="complete", limit=20)
+rounds_df = pd.DataFrame(rounds) if rounds else pd.DataFrame()
+
+if rounds_df.empty:
+    st.info("No rounds logged yet. Start a new round to see your stats here.")
+    if st.button("Start New Round"):
+        st.switch_page("pages/2_New_Round.py")
+    st.stop()
+
+# Load all hole scores for these rounds
+all_hole_scores = []
+for r in rounds:
+    all_hole_scores.extend(get_hole_scores(client, r["id"]))
+hole_scores_df = pd.DataFrame(all_hole_scores) if all_hole_scores else pd.DataFrame()
+
+user_metrics = compute_user_metrics(rounds_df, hole_scores_df, pd.DataFrame())
+n_shot_rounds = 0  # Shot data integration: count rounds with shots (Task 13 enhancement)
+
+# ── Focus Areas Card ──────────────────────────
+st.subheader("Focus Areas")
+focus_areas = build_focus_area_cards(user_metrics, pd.DataFrame(), hole_scores_df, n_shot_rounds)
+
+if not focus_areas:
+    st.info("Not enough data yet to identify focus areas. Log a few more rounds.")
+else:
+    cols = st.columns(len(focus_areas))
+    for col, area in zip(cols, focus_areas):
+        with col:
+            with st.container(border=True):
+                st.markdown(f"### {area['display_name']}")
+                val = area["user_value"]
+                target = area["target_value"]
+                if area["metric"].endswith("_pct"):
+                    st.metric(label="Your average", value=f"{val:.1%}", delta=f"{val - target:.1%} vs target", delta_color="inverse")
+                else:
+                    st.metric(label="Your average", value=f"{val:.1f}", delta=f"{val - target:+.1f} vs target", delta_color="inverse")
+                if area.get("insight"):
+                    st.caption(area["insight"])
+
+st.divider()
+
+# ── Scoring Trend ─────────────────────────────
+st.subheader("Scoring Trend")
+fig = px.line(
+    rounds_df.sort_values("date"),
+    x="date",
+    y="total_score",
+    markers=True,
+    labels={"total_score": "Score", "date": "Date"},
+    title="Score per Round (last 20)",
+)
+fig.update_traces(line_color="#2ecc71")
+st.plotly_chart(fig, use_container_width=True)
+
+# ── Key Stat Trends ───────────────────────────
+st.subheader("Key Stats")
+stat_cols = st.columns(3)
+with stat_cols[0]:
+    putts = hole_scores_df.groupby("round_id")["putts"].sum().mean()
+    st.metric("Avg Putts / Round", f"{putts:.1f}", help="Lower is better. Bogey avg: 36")
+with stat_cols[1]:
+    gir = hole_scores_df["green_in_regulation"].mean()
+    st.metric("GIR %", f"{gir:.1%}", help="Higher is better. Bogey avg: 25%")
+with stat_cols[2]:
+    fw = hole_scores_df[hole_scores_df["fairway_hit"] != "na"]
+    fw_pct = (fw["fairway_hit"] == "yes").mean() if not fw.empty else 0
+    st.metric("Fairways Hit %", f"{fw_pct:.1%}", help="Higher is better. Bogey avg: 40%")
