@@ -104,3 +104,106 @@ def normalize_metric_gap(metric: str, user_value: float, target_value: float) ->
         raw_gap = target_value - user_value
 
     return raw_gap / full_range
+
+
+def rank_focus_areas(user_metrics: dict, n: int = 2) -> list[dict]:
+    """
+    Rank metrics by gap vs interpolated personal benchmark.
+    Returns top n focus areas sorted by gap_score descending.
+    Only includes metrics where user is worse than target (gap_score > 0).
+    """
+    avg_score = user_metrics.get("avg_score", 90)
+    target = interpolate_benchmark(avg_score)
+
+    ranked = []
+    for metric, target_value in target.items():
+        user_value = user_metrics.get(metric)
+        if user_value is None:
+            continue
+        gap = normalize_metric_gap(metric, user_value, target_value)
+        if gap <= 0:
+            continue  # at or better than target
+        ranked.append({
+            "metric": metric,
+            "display_name": METRIC_DISPLAY_NAMES.get(metric, metric),
+            "user_value": user_value,
+            "target_value": target_value,
+            "gap_score": gap,
+        })
+
+    ranked.sort(key=lambda x: x["gap_score"], reverse=True)
+    return ranked[:n]
+
+
+def get_shot_pattern_insight(
+    metric: str,
+    shots_df: pd.DataFrame,
+    hole_scores_df: pd.DataFrame,
+) -> str | None:
+    """
+    Generate a plain-English insight for a focus area using shot data.
+    Returns None if not enough data or no clear pattern.
+    Minimum 5 relevant shots required before generating an insight.
+    """
+    if shots_df.empty:
+        return None
+
+    MIN_SHOTS = 5
+
+    if metric == "fairways_hit_pct":
+        tee_shots = shots_df[shots_df.get("shot_type", pd.Series(dtype=str)) == "tee"] if "shot_type" in shots_df.columns else shots_df
+        missed = tee_shots[tee_shots["miss_direction"].notna()] if "miss_direction" in tee_shots.columns else pd.DataFrame()
+        if len(missed) < MIN_SHOTS:
+            return None
+        left_pct = (missed["miss_direction"] == "left").mean()
+        right_pct = (missed["miss_direction"] == "right").mean()
+        dominant = "left" if left_pct >= right_pct else "right"
+        dominant_pct = max(left_pct, right_pct)
+        if dominant_pct >= 0.60:
+            pattern = "pull/hook" if dominant == "left" else "push/slice"
+            return f"{dominant_pct:.0%} of missed fairways go {dominant} — suggests a consistent {pattern} pattern"
+        return None
+
+    elif metric == "gir_pct":
+        if "miss_direction" not in shots_df.columns:
+            return None
+        missed_approach = shots_df[shots_df["miss_direction"].notna()]
+        if len(missed_approach) < MIN_SHOTS:
+            return None
+        left_pct = (missed_approach["miss_direction"] == "left").mean()
+        right_pct = (missed_approach["miss_direction"] == "right").mean()
+        dominant = "left" if left_pct >= right_pct else "right"
+        dominant_pct = max(left_pct, right_pct)
+        if dominant_pct >= 0.55:
+            return f"{dominant_pct:.0%} of approach misses go {dominant} — consistent ball flight issue on approach shots"
+        return None
+
+    elif metric == "putts_per_round":
+        return "Consider tracking individual putts to identify whether the issue is distance control or short putting"
+
+    return None
+
+
+def build_focus_area_cards(
+    user_metrics: dict,
+    shots_df: pd.DataFrame,
+    hole_scores_df: pd.DataFrame,
+    n_shot_rounds: int = 0,
+) -> list[dict]:
+    """
+    Return top 2 focus area dicts ready to render in the UI.
+    Each dict has: metric, display_name, user_value, target_value, gap_score, insight.
+    insight is None if not enough shot data (< 3 rounds with shots).
+    """
+    MIN_SHOT_ROUNDS = 3
+    areas = rank_focus_areas(user_metrics, n=2)
+
+    for area in areas:
+        if n_shot_rounds >= MIN_SHOT_ROUNDS:
+            area["insight"] = get_shot_pattern_insight(
+                area["metric"], shots_df, hole_scores_df
+            )
+        else:
+            area["insight"] = None
+
+    return areas

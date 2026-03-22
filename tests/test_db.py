@@ -66,3 +66,57 @@ def test_create_tee_rejects_wrong_yardage_length():
     client = make_mock_client()
     with pytest.raises(ValueError, match="yardage_per_hole must have exactly 18 values"):
         create_tee(client, "u1", "c1", "Blue", 72.0, 113, [400] * 9)
+
+
+from src.db import (
+    create_round, get_round, get_rounds, get_in_progress_round,
+    complete_round, upsert_hole_score, get_hole_scores, get_hole_score
+)
+
+
+def test_create_round():
+    client = make_mock_client()
+    client.table.return_value.insert.return_value.execute.return_value.data = [
+        {"id": "r1", "status": "in_progress", "user_id": "u1"}
+    ]
+    result = create_round(client, user_id="u1", course_id="c1", tee_id="t1",
+                          date="2026-03-22", holes_played="full")
+    assert result["status"] == "in_progress"
+
+
+def test_get_in_progress_round_returns_none_when_absent():
+    client = make_mock_client()
+    client.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+    result = get_in_progress_round(client, user_id="u1")
+    assert result is None
+
+
+def test_get_in_progress_round_returns_round_when_present():
+    client = make_mock_client()
+    client.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"id": "r1", "status": "in_progress"}
+    ]
+    result = get_in_progress_round(client, user_id="u1")
+    assert result["id"] == "r1"
+
+
+def test_upsert_hole_score():
+    client = make_mock_client()
+    client.table.return_value.upsert.return_value.execute.return_value.data = [
+        {"id": "hs1", "hole_number": 1, "score": 4}
+    ]
+    result = upsert_hole_score(client, round_id="r1", hole_number=1,
+                               score=4, putts=2, fairway_hit="yes",
+                               green_in_regulation=True, penalties=0)
+    assert result["hole_number"] == 1
+    assert result["score"] == 4
+
+
+def test_get_hole_scores_returns_list():
+    client = make_mock_client()
+    client.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value.data = [
+        {"id": "hs1", "hole_number": 1, "score": 4},
+        {"id": "hs2", "hole_number": 2, "score": 5},
+    ]
+    result = get_hole_scores(client, round_id="r1")
+    assert len(result) == 2

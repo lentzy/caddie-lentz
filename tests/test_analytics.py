@@ -115,3 +115,121 @@ def test_normalize_metric_gap_higher_is_better():
 def test_normalize_metric_gap_user_at_target():
     gap = normalize_metric_gap("putts_per_round", user_value=33, target_value=33)
     assert gap == pytest.approx(0.0)
+
+
+from src.analytics import rank_focus_areas, get_shot_pattern_insight, build_focus_area_cards
+
+
+def test_rank_focus_areas_returns_top_2():
+    user_metrics = {
+        "avg_score": 95,
+        "putts_per_round": 38,      # worse than bogey target
+        "gir_pct": 0.20,            # worse than bogey target
+        "fairways_hit_pct": 0.55,   # close to bogey target
+        "penalties_per_round": 2.0,
+    }
+    focus_areas = rank_focus_areas(user_metrics, n=2)
+    assert len(focus_areas) == 2
+    assert "metric" in focus_areas[0]
+    assert "gap_score" in focus_areas[0]
+    assert "display_name" in focus_areas[0]
+    assert "user_value" in focus_areas[0]
+    assert "target_value" in focus_areas[0]
+    # highest gap first
+    assert focus_areas[0]["gap_score"] >= focus_areas[1]["gap_score"]
+
+
+def test_rank_focus_areas_excludes_none_metrics():
+    user_metrics = {
+        "avg_score": 90,
+        "putts_per_round": 34,
+        "gir_pct": None,  # not enough data
+        "fairways_hit_pct": 0.45,
+    }
+    focus_areas = rank_focus_areas(user_metrics, n=2)
+    metrics_returned = [fa["metric"] for fa in focus_areas]
+    assert "gir_pct" not in metrics_returned
+
+
+def test_rank_focus_areas_excludes_metrics_at_or_better_than_target():
+    # User is AT the scratch benchmark for putts — should not appear as a focus area
+    user_metrics = {
+        "avg_score": 72,
+        "putts_per_round": 29,      # exactly at scratch target
+        "gir_pct": 0.20,            # worse than target
+        "fairways_hit_pct": 0.30,   # worse than target
+    }
+    focus_areas = rank_focus_areas(user_metrics, n=2)
+    metrics_returned = [fa["metric"] for fa in focus_areas]
+    assert "putts_per_round" not in metrics_returned
+
+
+def test_rank_focus_areas_fewer_than_n_when_all_at_target():
+    user_metrics = {
+        "avg_score": 95,
+        "putts_per_round": 36,      # exactly at bogey target
+        "gir_pct": 0.25,            # exactly at bogey target
+    }
+    focus_areas = rank_focus_areas(user_metrics, n=2)
+    # Both at target — gap_score <= 0 — should return empty list
+    assert len(focus_areas) == 0
+
+
+def test_shot_pattern_insight_miss_direction_fairways():
+    shots_df = pd.DataFrame([
+        {"shot_type": "tee", "miss_direction": "left"},
+        {"shot_type": "tee", "miss_direction": "left"},
+        {"shot_type": "tee", "miss_direction": "left"},
+        {"shot_type": "tee", "miss_direction": "left"},
+        {"shot_type": "tee", "miss_direction": "right"},
+    ])
+    insight = get_shot_pattern_insight("fairways_hit_pct", shots_df, pd.DataFrame())
+    assert insight is not None
+    assert "left" in insight.lower()
+    assert "80%" in insight or "4 of 5" in insight or "left" in insight
+
+
+def test_shot_pattern_insight_returns_none_with_insufficient_data():
+    shots_df = pd.DataFrame([
+        {"shot_type": "tee", "miss_direction": "left"},
+        {"shot_type": "tee", "miss_direction": "right"},
+    ])  # only 2 shots — below minimum of 5
+    insight = get_shot_pattern_insight("fairways_hit_pct", shots_df, pd.DataFrame())
+    assert insight is None
+
+
+def test_shot_pattern_insight_returns_none_for_unknown_metric():
+    shots_df = pd.DataFrame([{"shot_type": "tee", "miss_direction": "left"}] * 10)
+    insight = get_shot_pattern_insight("unknown_metric", shots_df, pd.DataFrame())
+    assert insight is None
+
+
+def test_build_focus_area_cards_adds_insight_when_enough_shot_rounds():
+    user_metrics = {
+        "avg_score": 90,
+        "putts_per_round": 38,
+        "gir_pct": 0.20,
+        "fairways_hit_pct": 0.30,
+        "penalties_per_round": 2.0,
+    }
+    shots_df = pd.DataFrame(
+        [{"shot_type": "tee", "miss_direction": "left"}] * 8 +
+        [{"shot_type": "tee", "miss_direction": "right"}] * 2
+    )
+    cards = build_focus_area_cards(user_metrics, shots_df, pd.DataFrame(), n_shot_rounds=3)
+    assert len(cards) == 2
+    # All cards have an "insight" key (may be None for some metrics)
+    for card in cards:
+        assert "insight" in card
+
+
+def test_build_focus_area_cards_no_insight_below_threshold():
+    user_metrics = {
+        "avg_score": 90,
+        "putts_per_round": 38,
+        "gir_pct": 0.20,
+        "fairways_hit_pct": 0.30,
+    }
+    cards = build_focus_area_cards(user_metrics, pd.DataFrame(), pd.DataFrame(), n_shot_rounds=2)
+    for card in cards:
+        assert card["insight"] is None
