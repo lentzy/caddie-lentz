@@ -1,4 +1,4 @@
-# Lentz Caddie
+# Caddie Lentz
 
 Golf score and statistics tracker. Tracks rounds hole-by-hole, logs shot data,
 and surfaces the top 1-2 practice focus areas based on recent performance.

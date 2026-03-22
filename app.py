@@ -1,10 +1,10 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="Lentz Caddie",
+    page_title="Caddie Lentz",
     page_icon="⛳",
     layout="wide",
 )
 
-st.title("⛳ Lentz Caddie")
+st.title("⛳ Caddie Lentz")
 st.write("Golf score and statistics tracker.")
