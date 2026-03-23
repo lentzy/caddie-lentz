@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from src.auth import require_auth, get_current_user_id, get_supabase_client
-from src.db import get_rounds, get_hole_scores, get_shots, get_hole_score
+from src.db import get_rounds, get_hole_scores_for_rounds, get_shots_for_hole_scores, get_courses_by_ids
 from src.analytics import compute_user_metrics, interpolate_benchmark
 from src.constants import BENCHMARKS
 
@@ -21,10 +21,16 @@ if not rounds:
     st.stop()
 
 rounds_df = pd.DataFrame(rounds)
-all_hole_scores = []
-for r in rounds:
-    all_hole_scores.extend(get_hole_scores(client, r["id"]))
-hole_scores_df = pd.DataFrame(all_hole_scores)
+round_ids = rounds_df["id"].tolist()
+hole_scores_df = pd.DataFrame(get_hole_scores_for_rounds(client, round_ids))
+
+# Join par from course data so analytics can compute scoring_avg_par3/4/5
+if not hole_scores_df.empty:
+    courses_map = {c["id"]: c for c in get_courses_by_ids(client, rounds_df["course_id"].unique().tolist())}
+    round_course = dict(zip(rounds_df["id"], rounds_df["course_id"]))
+    hole_scores_df["par"] = hole_scores_df.apply(
+        lambda r: courses_map[round_course[r["round_id"]]]["par_per_hole"][r["hole_number"] - 1], axis=1
+    )
 
 user_metrics = compute_user_metrics(rounds_df, hole_scores_df, pd.DataFrame())
 avg_score = user_metrics.get("avg_score", 90)
@@ -70,10 +76,8 @@ st.plotly_chart(fig2, use_container_width=True)
 # ── Shot Analysis ─────────────────────────────
 st.subheader("Shot Analysis")
 
-all_shots = []
 hs_ids = hole_scores_df["id"].tolist() if "id" in hole_scores_df.columns else []
-for hs_id in hs_ids[:200]:  # cap to avoid slow loads
-    all_shots.extend(get_shots(client, hs_id))
+all_shots = get_shots_for_hole_scores(client, hs_ids)
 
 if not all_shots:
     st.info("No shot data tracked yet. Enable shot tracking during a round to see analysis here.")

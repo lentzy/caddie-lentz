@@ -126,7 +126,10 @@ def test_get_hole_scores_returns_list():
 # SHOTS
 # ─────────────────────────────────────────────
 
-from src.db import create_shot, get_shots, delete_shots_for_hole, get_user_bag, set_user_bag
+from src.db import (
+    create_shot, get_shots, delete_shots_for_hole, get_user_bag, set_user_bag,
+    get_hole_scores_for_rounds, get_shots_for_hole_scores, get_courses_by_ids,
+)
 
 
 def test_create_shot():
@@ -160,3 +163,55 @@ def test_set_user_bag_replaces_existing():
     set_user_bag(client, user_id="u1", clubs=["Driver", "7i"])
     client.table.return_value.delete.assert_called()
     client.table.return_value.insert.assert_called()
+
+
+# ─────────────────────────────────────────────
+# BATCH QUERIES
+# ─────────────────────────────────────────────
+
+def test_get_hole_scores_for_rounds_returns_all():
+    client = make_mock_client()
+    client.table.return_value.select.return_value.in_.return_value.order.return_value.execute.return_value.data = [
+        {"id": "hs1", "round_id": "r1", "hole_number": 1},
+        {"id": "hs2", "round_id": "r2", "hole_number": 1},
+    ]
+    result = get_hole_scores_for_rounds(client, ["r1", "r2"])
+    assert len(result) == 2
+
+
+def test_get_hole_scores_for_rounds_empty_returns_empty():
+    client = make_mock_client()
+    result = get_hole_scores_for_rounds(client, [])
+    assert result == []
+
+
+def test_get_shots_for_hole_scores_returns_all():
+    client = make_mock_client()
+    client.table.return_value.select.return_value.in_.return_value.order.return_value.execute.return_value.data = [
+        {"id": "s1", "hole_score_id": "hs1", "shot_number": 1},
+        {"id": "s2", "hole_score_id": "hs2", "shot_number": 1},
+    ]
+    result = get_shots_for_hole_scores(client, ["hs1", "hs2"])
+    assert len(result) == 2
+
+
+def test_get_shots_for_hole_scores_empty_returns_empty():
+    client = make_mock_client()
+    result = get_shots_for_hole_scores(client, [])
+    assert result == []
+
+
+def test_get_courses_by_ids_returns_all():
+    client = make_mock_client()
+    client.table.return_value.select.return_value.in_.return_value.execute.return_value.data = [
+        {"id": "c1", "name": "Augusta National"},
+        {"id": "c2", "name": "Pebble Beach"},
+    ]
+    result = get_courses_by_ids(client, ["c1", "c2"])
+    assert len(result) == 2
+
+
+def test_get_courses_by_ids_empty_returns_empty():
+    client = make_mock_client()
+    result = get_courses_by_ids(client, [])
+    assert result == []

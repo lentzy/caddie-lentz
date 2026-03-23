@@ -233,3 +233,29 @@ def test_build_focus_area_cards_no_insight_below_threshold():
     cards = build_focus_area_cards(user_metrics, pd.DataFrame(), pd.DataFrame(), n_shot_rounds=2)
     for card in cards:
         assert card["insight"] is None
+
+
+def test_rank_focus_areas_trend_raises_ranking():
+    """A metric that is getting worse recently should outscore one with same absolute gap but stable trend."""
+    user_metrics = {"avg_score": 90, "putts_per_round": 35, "gir_pct": 0.28}
+    # Both metrics have similar absolute gaps vs target.
+    # Putting is getting worse recently; GIR is stable.
+    recent_metrics = {"avg_score": 90, "putts_per_round": 38, "gir_pct": 0.28}
+    prior_metrics = {"avg_score": 90, "putts_per_round": 33, "gir_pct": 0.28}
+    areas = rank_focus_areas(user_metrics, n=2, recent_metrics=recent_metrics, prior_metrics=prior_metrics)
+    metric_names = [a["metric"] for a in areas]
+    # Putting should rank first because trend is worsening
+    assert metric_names[0] == "putts_per_round"
+
+
+def test_rank_focus_areas_without_trend_uses_absolute_gap_only():
+    """Without recent/prior metrics, gap_score is based purely on absolute gap."""
+    user_metrics = {"avg_score": 90, "putts_per_round": 38, "gir_pct": 0.20}
+    areas_no_trend = rank_focus_areas(user_metrics, n=2)
+    areas_with_stable_trend = rank_focus_areas(
+        user_metrics, n=2,
+        recent_metrics={"putts_per_round": 38, "gir_pct": 0.20},
+        prior_metrics={"putts_per_round": 38, "gir_pct": 0.20},
+    )
+    # Order should be the same — stable trend doesn't change ranking
+    assert [a["metric"] for a in areas_no_trend] == [a["metric"] for a in areas_with_stable_trend]

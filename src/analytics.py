@@ -106,11 +106,17 @@ def normalize_metric_gap(metric: str, user_value: float, target_value: float) ->
     return raw_gap / full_range
 
 
-def rank_focus_areas(user_metrics: dict, n: int = 2) -> list[dict]:
+def rank_focus_areas(
+    user_metrics: dict,
+    n: int = 2,
+    recent_metrics: dict = None,
+    prior_metrics: dict = None,
+) -> list[dict]:
     """
     Rank metrics by gap vs interpolated personal benchmark.
     Returns top n focus areas sorted by gap_score descending.
-    Only includes metrics where user is worse than target (gap_score > 0).
+    gap_score = 0.7 * absolute_gap + 0.3 * trend_gap (recent 5 vs prior 5 rounds).
+    Trend component is omitted when recent_metrics/prior_metrics are not provided.
     """
     avg_score = user_metrics.get("avg_score", 90)
     target = interpolate_benchmark(avg_score)
@@ -120,15 +126,25 @@ def rank_focus_areas(user_metrics: dict, n: int = 2) -> list[dict]:
         user_value = user_metrics.get(metric)
         if user_value is None:
             continue
-        gap = normalize_metric_gap(metric, user_value, target_value)
-        if gap <= 0:
-            continue  # at or better than target
+        abs_gap = normalize_metric_gap(metric, user_value, target_value)
+
+        trend_gap = 0.0
+        if recent_metrics and prior_metrics:
+            recent_val = recent_metrics.get(metric)
+            prior_val = prior_metrics.get(metric)
+            if recent_val is not None and prior_val is not None:
+                # Positive = getting worse recently
+                trend_gap = normalize_metric_gap(metric, recent_val, prior_val)
+
+        gap_score = 0.7 * abs_gap + 0.3 * trend_gap
+        if gap_score <= 0:
+            continue
         ranked.append({
             "metric": metric,
             "display_name": METRIC_DISPLAY_NAMES.get(metric, metric),
             "user_value": user_value,
             "target_value": target_value,
-            "gap_score": gap,
+            "gap_score": gap_score,
         })
 
     ranked.sort(key=lambda x: x["gap_score"], reverse=True)
@@ -189,14 +205,17 @@ def build_focus_area_cards(
     shots_df: pd.DataFrame,
     hole_scores_df: pd.DataFrame,
     n_shot_rounds: int = 0,
+    recent_metrics: dict = None,
+    prior_metrics: dict = None,
 ) -> list[dict]:
     """
     Return top 2 focus area dicts ready to render in the UI.
     Each dict has: metric, display_name, user_value, target_value, gap_score, insight.
     insight is None if not enough shot data (< 3 rounds with shots).
+    recent_metrics / prior_metrics enable 70/30 trend weighting in ranking.
     """
     MIN_SHOT_ROUNDS = 3
-    areas = rank_focus_areas(user_metrics, n=2)
+    areas = rank_focus_areas(user_metrics, n=2, recent_metrics=recent_metrics, prior_metrics=prior_metrics)
 
     for area in areas:
         if n_shot_rounds >= MIN_SHOT_ROUNDS:

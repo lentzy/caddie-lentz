@@ -14,6 +14,13 @@ def get_courses(client: Client, search: str = None) -> list[dict]:
     return query.order("name").execute().data
 
 
+def get_courses_by_ids(client: Client, course_ids: list[str]) -> list[dict]:
+    """Fetch multiple courses by ID in a single query."""
+    if not course_ids:
+        return []
+    return client.table("courses").select("*").in_("id", course_ids).execute().data
+
+
 def get_course(client: Client, course_id: str) -> dict | None:
     result = client.table("courses").select("*").eq("id", course_id).execute()
     return result.data[0] if result.data else None
@@ -216,6 +223,20 @@ def get_hole_scores(client: Client, round_id: str) -> list[dict]:
     )
 
 
+def get_hole_scores_for_rounds(client: Client, round_ids: list[str]) -> list[dict]:
+    """Fetch all hole scores for multiple rounds in a single query."""
+    if not round_ids:
+        return []
+    return (
+        client.table("hole_scores")
+        .select("*")
+        .in_("round_id", round_ids)
+        .order("hole_number")
+        .execute()
+        .data
+    )
+
+
 def get_hole_score(client: Client, hole_score_id: str) -> dict | None:
     result = client.table("hole_scores").select("*").eq("id", hole_score_id).execute()
     return result.data[0] if result.data else None
@@ -260,6 +281,20 @@ def get_shots(client: Client, hole_score_id: str) -> list[dict]:
         client.table("shots")
         .select("*")
         .eq("hole_score_id", hole_score_id)
+        .order("shot_number")
+        .execute()
+        .data
+    )
+
+
+def get_shots_for_hole_scores(client: Client, hole_score_ids: list[str]) -> list[dict]:
+    """Fetch all shots for multiple hole scores in a single query."""
+    if not hole_score_ids:
+        return []
+    return (
+        client.table("shots")
+        .select("*")
+        .in_("hole_score_id", hole_score_ids)
         .order("shot_number")
         .execute()
         .data
