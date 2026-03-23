@@ -5,7 +5,7 @@ import plotly.express as px
 from src.auth import require_auth, get_current_user_id, get_supabase_client
 from src.db import get_rounds, get_hole_scores, get_in_progress_round
 from src.analytics import compute_user_metrics, build_focus_area_cards, METRIC_DISPLAY_NAMES
-from src.constants import BENCHMARKS
+from src.constants import BENCHMARKS, HOLES_FOR_ROUND
 
 require_auth()
 
@@ -18,9 +18,15 @@ user_id = get_current_user_id()
 in_progress = get_in_progress_round(client, user_id)
 if in_progress:
     course_name = in_progress.get("courses", {}).get("name", "Unknown Course")
-    st.warning(f"Round in progress: **{course_name}** on {in_progress['date']}")
+    round_label = in_progress.get("name") or in_progress["date"]
+    st.warning(f"Round in progress: **{round_label}** — {course_name}")
     if st.button("Continue Round"):
+        holes = HOLES_FOR_ROUND[in_progress["holes_played"]]
+        saved = {h["hole_number"] for h in get_hole_scores(client, in_progress["id"])}
+        next_idx = next((i for i, h in enumerate(holes) if h not in saved), len(holes) - 1)
         st.session_state["active_round_id"] = in_progress["id"]
+        st.session_state["round_step"] = "playing"
+        st.session_state["current_hole_idx"] = next_idx
         st.switch_page("pages/2_New_Round.py")
 
 # ── Load data ──────────────────────────────────
@@ -88,6 +94,6 @@ with stat_cols[1]:
     gir = hole_scores_df["green_in_regulation"].mean()
     st.metric("GIR %", f"{gir:.1%}", help="Higher is better. Bogey avg: 25%")
 with stat_cols[2]:
-    fw = hole_scores_df[hole_scores_df["fairway_hit"] != "na"]
-    fw_pct = (fw["fairway_hit"] == "yes").mean() if not fw.empty else 0
+    fw = hole_scores_df[hole_scores_df["fairway_hit"].notna()]
+    fw_pct = fw["fairway_hit"].mean() if not fw.empty else 0
     st.metric("Fairways Hit %", f"{fw_pct:.1%}", help="Higher is better. Bogey avg: 40%")

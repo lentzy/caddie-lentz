@@ -4,7 +4,7 @@ import pytest
 from src.analytics import compute_user_metrics, interpolate_benchmark, normalize_metric_gap
 
 
-def make_hole_scores(n_rounds=5, putts_per_hole=2, gir=True, fairway="yes", penalties=0, score=4):
+def make_hole_scores(n_rounds=5, putts_per_hole=2, gir=True, fairway=True, penalties=0, score=4):
     rows = []
     for r in range(n_rounds):
         for h in range(1, 19):
@@ -50,14 +50,14 @@ def test_compute_user_metrics_gir_pct_all_false():
 
 def test_compute_user_metrics_fairways_hit_pct():
     rounds_df = make_rounds(5)
-    hole_scores_df = make_hole_scores(5, fairway="yes")
+    hole_scores_df = make_hole_scores(5, fairway=True)
     metrics = compute_user_metrics(rounds_df, hole_scores_df, pd.DataFrame())
     assert metrics["fairways_hit_pct"] == pytest.approx(1.0)
 
 
 def test_compute_user_metrics_fairways_excludes_na():
     rounds_df = make_rounds(5)
-    hole_scores_df = make_hole_scores(5, fairway="na")
+    hole_scores_df = make_hole_scores(5, fairway=None)
     metrics = compute_user_metrics(rounds_df, hole_scores_df, pd.DataFrame())
     assert metrics["fairways_hit_pct"] is None
 

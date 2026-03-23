@@ -25,8 +25,9 @@ rounds_df = pd.DataFrame(rounds)
 rounds_df["course_name"] = rounds_df["courses"].apply(lambda x: x["name"] if x else "Unknown")
 rounds_df["tee_name"] = rounds_df["tees"].apply(lambda x: x["tee_name"] if x else "Unknown")
 
-display_df = rounds_df[["date", "course_name", "tee_name", "holes_played", "total_score"]].copy()
-display_df.columns = ["Date", "Course", "Tee", "Holes", "Score"]
+rounds_df["round_name"] = rounds_df["name"].where(rounds_df["name"].notna(), rounds_df["date"]) if "name" in rounds_df.columns else rounds_df["date"]
+display_df = rounds_df[["round_name", "date", "course_name", "tee_name", "holes_played", "total_score"]].copy()
+display_df.columns = ["Name", "Date", "Course", "Tee", "Holes", "Score"]
 display_df = display_df.sort_values("Date", ascending=False)
 
 selected_idx = st.dataframe(
@@ -72,8 +73,10 @@ with st.expander("Edit this round"):
         penalties = col3.number_input("Penalties", 0, 10, value=h["penalties"])
 
         col4, col5 = st.columns(2)
-        fw_options = ["yes", "no", "na"]
-        fairway_hit = col4.selectbox("Fairway hit", fw_options, index=fw_options.index(h["fairway_hit"]))
+        if par == 3:
+            fairway_hit = None
+        else:
+            fairway_hit = col4.checkbox("Fairway hit", value=bool(h["fairway_hit"]) if h["fairway_hit"] is not None else False)
         gir = col5.checkbox("Green in regulation", value=h["green_in_regulation"])
 
         save = st.form_submit_button("Save Changes")

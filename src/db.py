@@ -26,6 +26,7 @@ def create_course(
     city: str,
     state: str,
     par_per_hole: list[int],
+    website: str | None = None,
 ) -> dict:
     if len(par_per_hole) != 18:
         raise ValueError("par_per_hole must have exactly 18 values")
@@ -36,6 +37,7 @@ def create_course(
         "state": state,
         "number_of_holes": 18,
         "par_per_hole": par_per_hole,
+        "website": website or None,
     }).execute()
     return result.data[0]
 
@@ -105,7 +107,12 @@ def create_round(
     date: str,
     holes_played: str = "full",
     notes: str = None,
+    name: str = None,
 ) -> dict:
+    if not name:
+        existing = client.table("rounds").select("id", count="exact").eq("user_id", user_id).eq("date", date).execute()
+        count = existing.count or 0
+        name = date if count == 0 else f"{date} #{count + 1}"
     result = client.table("rounds").insert({
         "user_id": user_id,
         "course_id": course_id,
@@ -114,6 +121,7 @@ def create_round(
         "holes_played": holes_played,
         "status": "in_progress",
         "notes": notes,
+        "name": name,
     }).execute()
     return result.data[0]
 
@@ -181,7 +189,7 @@ def upsert_hole_score(
     hole_number: int,
     score: int,
     putts: int,
-    fairway_hit: str,
+    fairway_hit: bool | None,
     green_in_regulation: bool,
     penalties: int,
 ) -> dict:

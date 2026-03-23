@@ -106,7 +106,7 @@ def test_upsert_hole_score():
         {"id": "hs1", "hole_number": 1, "score": 4}
     ]
     result = upsert_hole_score(client, round_id="r1", hole_number=1,
-                               score=4, putts=2, fairway_hit="yes",
+                               score=4, putts=2, fairway_hit=True,
                                green_in_regulation=True, penalties=0)
     assert result["hole_number"] == 1
     assert result["score"] == 4

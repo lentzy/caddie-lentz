@@ -44,10 +44,10 @@ def compute_user_metrics(
     # GIR %
     metrics["gir_pct"] = float(hs["green_in_regulation"].mean())
 
-    # Fairways hit % (exclude 'na' holes — par 3s)
-    fairway_holes = hs[hs["fairway_hit"] != "na"]
+    # Fairways hit % (exclude NULL holes — par 3s)
+    fairway_holes = hs[hs["fairway_hit"].notna()]
     if not fairway_holes.empty:
-        metrics["fairways_hit_pct"] = float((fairway_holes["fairway_hit"] == "yes").mean())
+        metrics["fairways_hit_pct"] = float(fairway_holes["fairway_hit"].mean())
     else:
         metrics["fairways_hit_pct"] = None
 

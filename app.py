@@ -11,15 +11,8 @@ st.set_page_config(
 # Initialize Supabase client on first load
 get_supabase_client()
 
-if is_authenticated():
-    with st.sidebar:
-        user = st.session_state.user
-        st.write(f"Logged in as **{user.email}**")
-        if st.button("Logout", use_container_width=True):
-            logout()
-            st.rerun()
-    st.switch_page("pages/1_Dashboard.py")
-else:
+
+def login_page():
     st.title("⛳ Caddie Lentz")
     st.caption("Golf score and statistics tracker")
 
@@ -73,3 +66,25 @@ else:
                         st.success(message)
                     else:
                         st.error(message)
+
+
+if is_authenticated():
+    with st.sidebar:
+        user = st.session_state.user
+        st.write(f"Logged in as **{user.email}**")
+        if st.button("Logout", use_container_width=True):
+            logout()
+            st.rerun()
+
+    pg = st.navigation([
+        st.Page("pages/1_Dashboard.py", title="Dashboard"),
+        st.Page("pages/2_New_Round.py", title="New Round"),
+        st.Page("pages/3_Round_History.py", title="Round History"),
+        st.Page("pages/4_Course_Manager.py", title="Course Manager"),
+        st.Page("pages/5_Stats.py", title="Stats"),
+        st.Page("pages/6_Profile.py", title="Profile"),
+    ])
+else:
+    pg = st.navigation([st.Page(login_page, title="Login")])
+
+pg.run()

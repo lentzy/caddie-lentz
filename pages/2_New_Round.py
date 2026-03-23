@@ -33,45 +33,42 @@ if st.session_state.round_step == "setup":
     selected_course_id = None
     tee_id = None
 
-    if not courses:
-        st.info("No courses found. Add one below.")
-    else:
-        course_options = {f"{c['name']} — {c['city']}, {c['state']}": c["id"] for c in courses}
-        selected_course_label = st.selectbox("Select course", options=list(course_options.keys()))
-        selected_course_id = course_options[selected_course_label]
+    ADD_NEW = "+ Add new course..."
+    course_options = {f"{c['name']} — {c['city']}, {c['state']}": c["id"] for c in courses}
+    selectbox_options = list(course_options.keys()) + [ADD_NEW]
+    selected_label = st.selectbox("Select course", options=selectbox_options)
 
-    # Add new course expander
-    with st.expander("+ Add a new course"):
+    if selected_label == ADD_NEW:
         with st.form("add_course_form"):
             new_name = st.text_input("Course name")
             col1, col2 = st.columns(2)
             new_city = col1.text_input("City")
             new_state = col2.text_input("State")
+            new_website = st.text_input("Website (optional)", placeholder="https://...")
             st.write("Par for each hole (1–18):")
             par_cols = st.columns(9)
             pars = []
             for i in range(18):
                 pars.append(par_cols[i % 9].number_input(f"H{i+1}", min_value=3, max_value=6, value=4, key=f"par_{i}"))
-            add_course_submitted = st.form_submit_button("Add Course")
-            if add_course_submitted:
+            if st.form_submit_button("Add Course", type="primary"):
                 if new_name and new_city and new_state:
-                    create_course(client, user_id, new_name, new_city, new_state, pars)
+                    create_course(client, user_id, new_name, new_city, new_state, pars, website=new_website or None)
                     st.success(f"Course '{new_name}' added!")
                     st.rerun()
                 else:
                     st.error("Please fill in name, city, and state.")
+    else:
+        selected_course_id = course_options.get(selected_label)
 
     # Tee selection
-    if courses and selected_course_id:
+    if selected_course_id:
         tees = get_tees(client, course_id=selected_course_id)
-        if not tees:
-            st.warning("No tees set up for this course yet. Add one below.")
-        else:
-            tee_options = {f"{t['tee_name']} (Rating: {t['rating']}, Slope: {t['slope']})": t["id"] for t in tees}
-            selected_tee_label = st.selectbox("Select tee", options=list(tee_options.keys()))
-            tee_id = tee_options[selected_tee_label]
+        ADD_NEW_TEE = "+ Add new tee..."
+        tee_options = {f"{t['tee_name']} (Rating: {t['rating']}, Slope: {t['slope']})": t["id"] for t in tees}
+        tee_selectbox_options = list(tee_options.keys()) + [ADD_NEW_TEE]
+        selected_tee_label = st.selectbox("Select tee", options=tee_selectbox_options)
 
-        with st.expander("+ Add a tee for this course"):
+        if selected_tee_label == ADD_NEW_TEE:
             with st.form("add_tee_form"):
                 tee_name = st.text_input("Tee name (e.g. Blue, White)")
                 col1, col2 = st.columns(2)
@@ -82,17 +79,19 @@ if st.session_state.round_step == "setup":
                 yardages = []
                 for i in range(18):
                     yardages.append(yard_cols[i % 9].number_input(f"H{i+1}", min_value=50, max_value=700, value=400, key=f"yd_{i}"))
-                add_tee_submitted = st.form_submit_button("Add Tee")
-                if add_tee_submitted and tee_name:
+                if st.form_submit_button("Add Tee", type="primary") and tee_name:
                     create_tee(client, user_id, selected_course_id, tee_name, rating, slope, yardages)
                     st.success(f"Tee '{tee_name}' added!")
                     st.rerun()
+        else:
+            tee_id = tee_options.get(selected_tee_label)
 
     holes_label = st.selectbox("Holes played", options=list(HOLES_PLAYED_OPTIONS.keys()))
     round_date = st.date_input("Date", value=date.today())
+    round_name = st.text_input("Round name (optional)", placeholder="Leave blank to auto-generate")
     notes = st.text_area("Notes (optional)", height=68)
 
-    if st.button("Start Round", type="primary", disabled=(not courses or not tee_id)):
+    if st.button("Start Round", type="primary", disabled=(not selected_course_id or not tee_id)):
         new_round = create_round(
             client, user_id,
             course_id=selected_course_id,
@@ -100,6 +99,7 @@ if st.session_state.round_step == "setup":
             date=str(round_date),
             holes_played=HOLES_PLAYED_OPTIONS[holes_label],
             notes=notes or None,
+            name=round_name or None,
         )
         st.session_state.active_round_id = new_round["id"]
         st.session_state.round_step = "playing"
@@ -154,12 +154,11 @@ elif st.session_state.round_step == "playing":
         )
 
         col4, col5 = st.columns(2)
-        fairway_options = ["yes", "no", "na"]
-        default_fairway = existing["fairway_hit"] if existing else ("na" if par == 3 else "yes")
-        fairway_hit = col4.selectbox(
-            "Fairway hit", options=fairway_options,
-            index=fairway_options.index(default_fairway),
-        )
+        if par == 3:
+            fairway_hit = None
+        else:
+            default_fairway = existing["fairway_hit"] if existing else False
+            fairway_hit = col4.checkbox("Fairway hit", value=bool(default_fairway) if default_fairway is not None else False)
 
         gir = col5.checkbox(
             "Green in regulation",
@@ -198,60 +197,85 @@ elif st.session_state.round_step == "playing":
 
             st.rerun()
 
-    # Shot tracking (separate from the hole score form to allow dynamic rows)
-    with st.expander("Track Shots (optional)"):
-        from src.db import get_shots, create_shot, delete_shots_for_hole, get_user_bag
-        from src.constants import (
-            ALL_CLUBS, SHOT_TYPE_OPTIONS, LIE_OPTIONS,
-            CONTACT_OPTIONS, OUTCOME_OPTIONS, PENALTY_REASON_OPTIONS
-        )
+    # Shot tracking — only available once the hole score has been saved
+    from src.db import get_shots, create_shot, delete_shots_for_hole, get_user_bag
+    from src.constants import (
+        ALL_CLUBS, SHOT_TYPE_OPTIONS, LIE_OPTIONS,
+        CONTACT_OPTIONS, OUTCOME_OPTIONS, PENALTY_REASON_OPTIONS
+    )
 
-        user_bag = get_user_bag(client, user_id)
-        club_options = user_bag if user_bag else ALL_CLUBS
+    if not existing:
+        st.caption("Save this hole score (click Next Hole →) to enable shot tracking.")
+    else:
+        existing_shots = get_shots(client, existing["id"])
+        shot_label = f"Track Shots ({len(existing_shots)} logged)" if existing_shots else "Track Shots (optional)"
+        with st.expander(shot_label):
+            user_bag = get_user_bag(client, user_id)
+            if not user_bag:
+                st.info("No bag set up — showing all clubs. [Set up your bag in Profile →](Profile)")
+            club_options = user_bag if user_bag else ALL_CLUBS
 
-        if existing:
-            existing_shots = get_shots(client, existing["id"])
-            st.write(f"{len(existing_shots)} shot(s) tracked for this hole.")
+            with st.form(f"shot_form_{hole_number}"):
+                s_col1, s_col2, s_col3 = st.columns(3)
+                shot_club = s_col1.selectbox("Club", options=club_options)
+                shot_type = s_col2.selectbox("Shot type (lie location)", options=SHOT_TYPE_OPTIONS)
+                lie = s_col3.selectbox("Lie quality", options=LIE_OPTIONS)
 
-        st.write("**Add shots one at a time:**")
-        with st.form(f"shot_form_{hole_number}"):
-            s_col1, s_col2, s_col3 = st.columns(3)
-            shot_club = s_col1.selectbox("Club", options=club_options)
-            shot_type = s_col2.selectbox("Shot type (lie location)", options=SHOT_TYPE_OPTIONS)
-            lie = s_col3.selectbox("Lie quality", options=LIE_OPTIONS)
+                s_col4, s_col5, s_col6 = st.columns(3)
+                distance_to_hole = s_col4.number_input("Distance to hole (yds)", min_value=0, max_value=600, value=150)
+                distance_hit = s_col5.number_input("Distance hit (yds, optional)", min_value=0, max_value=400, value=0)
+                outcome = s_col6.selectbox("Outcome", options=OUTCOME_OPTIONS)
 
-            s_col4, s_col5, s_col6 = st.columns(3)
-            distance_to_hole = s_col4.number_input("Distance to hole (yds)", min_value=0, max_value=600, value=150)
-            distance_hit = s_col5.number_input("Distance hit (yds, optional)", min_value=0, max_value=400, value=0)
-            outcome = s_col6.selectbox("Outcome", options=OUTCOME_OPTIONS)
+                contact = st.multiselect("Contact (select all that apply)", options=CONTACT_OPTIONS, default=["good"])
+                miss_direction = st.selectbox("Miss direction (if applicable)", options=["none", "left", "right"])
+                penalty_reason = None
+                if outcome == "penalty":
+                    penalty_reason = st.selectbox("Penalty reason", options=PENALTY_REASON_OPTIONS)
 
-            contact = st.multiselect("Contact (select all that apply)", options=CONTACT_OPTIONS, default=["good"])
-            miss_direction = st.selectbox("Miss direction (if applicable)", options=["none", "left", "right"])
-            penalty_reason = None
-            if outcome == "penalty":
-                penalty_reason = st.selectbox("Penalty reason", options=PENALTY_REASON_OPTIONS)
+                if st.form_submit_button("Add Shot", type="primary"):
+                    create_shot(
+                        client,
+                        hole_score_id=existing["id"],
+                        shot_number=len(existing_shots) + 1,
+                        distance_to_hole=distance_to_hole if distance_to_hole > 0 else None,
+                        club=shot_club,
+                        shot_type=shot_type,
+                        lie=lie,
+                        contact=contact,
+                        miss_direction=miss_direction if miss_direction != "none" else None,
+                        outcome=outcome,
+                        penalty_reason=penalty_reason,
+                        distance_hit=distance_hit if distance_hit > 0 else None,
+                    )
+                    st.rerun()
 
-            add_shot = st.form_submit_button("Add Shot")
-            if add_shot and existing:
-                shot_num = len(existing_shots) + 1 if existing else 1
-                create_shot(
-                    client,
-                    hole_score_id=existing["id"],
-                    shot_number=shot_num,
-                    distance_to_hole=distance_to_hole if distance_to_hole > 0 else None,
-                    club=shot_club,
-                    shot_type=shot_type,
-                    lie=lie,
-                    contact=contact,
-                    miss_direction=miss_direction if miss_direction != "none" else None,
-                    outcome=outcome,
-                    penalty_reason=penalty_reason,
-                    distance_hit=distance_hit if distance_hit > 0 else None,
-                )
-                st.success("Shot added!")
-                st.rerun()
-            elif add_shot and not existing:
-                st.warning("Save the hole score first (click Next Hole), then come back to add shots.")
+    st.divider()
+    col_save, col_abandon = st.columns(2)
+
+    if col_save.button("Save & Exit", use_container_width=True):
+        st.session_state.round_step = "setup"
+        st.session_state.active_round_id = None
+        st.session_state.current_hole_idx = 0
+        st.switch_page("pages/1_Dashboard.py")
+
+    if not st.session_state.get("confirm_abandon"):
+        if col_abandon.button("Abandon Round", use_container_width=True, type="secondary"):
+            st.session_state.confirm_abandon = True
+            st.rerun()
+    else:
+        st.warning("This will delete the round and all saved hole scores. Are you sure?")
+        c1, c2 = st.columns(2)
+        if c1.button("Yes, delete it", type="primary", use_container_width=True):
+            from src.db import delete_round
+            delete_round(client, st.session_state.active_round_id)
+            st.session_state.round_step = "setup"
+            st.session_state.active_round_id = None
+            st.session_state.current_hole_idx = 0
+            st.session_state.confirm_abandon = False
+            st.switch_page("pages/1_Dashboard.py")
+        if c2.button("Cancel", use_container_width=True):
+            st.session_state.confirm_abandon = False
+            st.rerun()
 
 # ── STEP: COMPLETE ────────────────────────────
 elif st.session_state.round_step == "complete":
