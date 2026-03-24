@@ -201,7 +201,8 @@ elif st.session_state.round_step == "playing":
     from src.db import get_shots, create_shot, delete_shots_for_hole, get_user_bag
     from src.constants import (
         ALL_CLUBS, SHOT_TYPE_OPTIONS, LIE_OPTIONS,
-        CONTACT_OPTIONS, OUTCOME_OPTIONS, PENALTY_REASON_OPTIONS
+        CONTACT_OPTIONS, OUTCOME_OPTIONS, PENALTY_REASON_OPTIONS,
+        MISS_DISTANCE_OPTIONS
     )
 
     if not existing:
@@ -227,7 +228,9 @@ elif st.session_state.round_step == "playing":
                 outcome = s_col6.selectbox("Outcome", options=OUTCOME_OPTIONS)
 
                 contact = st.multiselect("Contact (select all that apply)", options=CONTACT_OPTIONS, default=["good"])
-                miss_direction = st.selectbox("Miss direction (if applicable)", options=["none", "left", "right"])
+                md_col1, md_col2 = st.columns(2)
+                miss_direction = md_col1.selectbox("Miss direction (if applicable)", options=["none", "left", "right"])
+                miss_distance = md_col2.selectbox("Miss distance (if applicable)", options=["none"] + MISS_DISTANCE_OPTIONS)
                 penalty_reason = None
                 if outcome == "penalty":
                     penalty_reason = st.selectbox("Penalty reason", options=PENALTY_REASON_OPTIONS)
@@ -243,6 +246,7 @@ elif st.session_state.round_step == "playing":
                         lie=lie,
                         contact=contact,
                         miss_direction=miss_direction if miss_direction != "none" else None,
+                        miss_distance=miss_distance if miss_distance != "none" else None,
                         outcome=outcome,
                         penalty_reason=penalty_reason,
                         distance_hit=distance_hit if distance_hit > 0 else None,

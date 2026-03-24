@@ -37,6 +37,7 @@ SHOT_TYPE_OPTIONS = ["tee", "fairway", "rough", "sand", "other"]
 LIE_OPTIONS = ["good", "bad"]
 CONTACT_OPTIONS = ["good", "chunk", "top", "fat", "thin", "toe", "heel", "other"]
 MISS_DIRECTION_OPTIONS = ["left", "right"]
+MISS_DISTANCE_OPTIONS = ["long", "short", "pin_high"]
 OUTCOME_OPTIONS = ["fairway", "green", "penalty", "other"]
 PENALTY_REASON_OPTIONS = ["ob", "water", "unplayable", "lost_ball", "other"]
 
