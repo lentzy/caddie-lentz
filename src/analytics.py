@@ -1,6 +1,6 @@
 # src/analytics.py
 import pandas as pd
-from src.constants import BENCHMARKS
+from src.constants import BENCHMARKS, HANDICAP_BENCHMARKS, HANDICAP_LABELS
 
 # Metrics where LOWER value is better
 LOWER_IS_BETTER = {
@@ -68,15 +68,36 @@ def compute_user_metrics(
     return metrics
 
 
+def get_targets(settings: dict | None) -> tuple[dict, str]:
+    """
+    Return (target_dict, display_label) for Key Stats based on user settings.
+    Falls back to 20-handicap benchmarks when settings is None.
+    """
+    if not settings:
+        return HANDICAP_BENCHMARKS["20"], HANDICAP_LABELS["20"]
+
+    hdcp = settings.get("target_handicap", "20")
+
+    if hdcp == "custom":
+        fallback = HANDICAP_BENCHMARKS["20"]
+        return {
+            "putts_per_round": settings.get("custom_putts_per_round") or fallback["putts_per_round"],
+            "gir_pct": settings.get("custom_gir_pct") or fallback["gir_pct"],
+            "fairways_hit_pct": settings.get("custom_fairways_hit_pct") or fallback["fairways_hit_pct"],
+        }, HANDICAP_LABELS["custom"]
+
+    return HANDICAP_BENCHMARKS.get(hdcp, HANDICAP_BENCHMARKS["20"]), HANDICAP_LABELS.get(hdcp, hdcp)
+
+
 def interpolate_benchmark(avg_score: float) -> dict:
     """
     Linearly interpolate between scratch and bogey benchmarks based on avg_score.
-    Clamps to [72, 95] range — no extrapolation beyond anchors.
+    Clamps to [74.6, 93.7] range — no extrapolation beyond anchors.
     """
     scratch = BENCHMARKS["scratch"]
     bogey = BENCHMARKS["bogey"]
-    scratch_score = scratch["avg_score"]  # 72
-    bogey_score = bogey["avg_score"]      # 95
+    scratch_score = scratch["avg_score"]  # 74.6
+    bogey_score = bogey["avg_score"]      # 93.7
 
     clamped = max(scratch_score, min(bogey_score, avg_score))
     t = (clamped - scratch_score) / (bogey_score - scratch_score)

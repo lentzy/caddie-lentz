@@ -10,26 +10,50 @@ CLUB_LIST = {
 
 ALL_CLUBS = [club for clubs in CLUB_LIST.values() for club in clubs]
 
+# Handicap benchmarks from breakxgolf.com/golf-stats-by-handicap
+# Keys are handicap index as string; "custom" handled separately
+HANDICAP_BENCHMARKS = {
+    "0":  {"avg_score": 74.6, "putts_per_round": 31.3, "gir_pct": 0.568, "fairways_hit_pct": 0.565},
+    "5":  {"avg_score": 79.0, "putts_per_round": 32.5, "gir_pct": 0.461, "fairways_hit_pct": 0.510},
+    "10": {"avg_score": 84.6, "putts_per_round": 33.9, "gir_pct": 0.373, "fairways_hit_pct": 0.493},
+    "15": {"avg_score": 89.3, "putts_per_round": 34.8, "gir_pct": 0.264, "fairways_hit_pct": 0.481},
+    "20": {"avg_score": 93.7, "putts_per_round": 36.1, "gir_pct": 0.224, "fairways_hit_pct": 0.428},
+    "25": {"avg_score": 98.6, "putts_per_round": 37.0, "gir_pct": 0.187, "fairways_hit_pct": 0.430},
+}
+
+HANDICAP_LABELS = {
+    "0":  "Scratch (0)",
+    "5":  "5 Handicap",
+    "10": "10 Handicap",
+    "15": "15 Handicap",
+    "20": "20 Handicap",
+    "25": "25 Handicap",
+    "custom": "Custom",
+}
+
+BENCHMARK_SOURCE = "breakxgolf.com/golf-stats-by-handicap"
+
+# Anchor benchmarks for focus-area interpolation (scratch = hdcp 0, bogey ≈ hdcp 20)
 BENCHMARKS = {
     "scratch": {
-        "avg_score": 72,
-        "putts_per_round": 29,
-        "gir_pct": 0.67,
-        "fairways_hit_pct": 0.62,
+        "avg_score": 74.6,
+        "putts_per_round": 31.3,
+        "gir_pct": 0.568,
+        "fairways_hit_pct": 0.565,
         "penalties_per_round": 0.5,
         "scoring_avg_par3": 3.1,
         "scoring_avg_par4": 4.2,
-        "scoring_avg_par5": 5.0,
+        "scoring_avg_par5": 4.8,
     },
     "bogey": {
-        "avg_score": 95,
-        "putts_per_round": 36,
-        "gir_pct": 0.25,
-        "fairways_hit_pct": 0.40,
+        "avg_score": 93.7,
+        "putts_per_round": 36.1,
+        "gir_pct": 0.224,
+        "fairways_hit_pct": 0.428,
         "penalties_per_round": 3.0,
         "scoring_avg_par3": 4.0,
         "scoring_avg_par4": 5.5,
-        "scoring_avg_par5": 6.5,
+        "scoring_avg_par5": 6.3,
     },
 }
 

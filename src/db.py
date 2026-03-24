@@ -338,3 +338,29 @@ def set_user_bag(client: Client, user_id: str, clubs: list[str]):
     if clubs:
         rows = [{"user_id": user_id, "club": club} for club in clubs]
         client.table("user_bag").insert(rows).execute()
+
+
+# ─────────────────────────────────────────────
+# USER SETTINGS
+# ─────────────────────────────────────────────
+
+def get_user_settings(client: Client, user_id: str) -> dict | None:
+    result = client.table("user_settings").select("*").eq("user_id", user_id).execute()
+    return result.data[0] if result.data else None
+
+
+def upsert_user_settings(
+    client: Client,
+    user_id: str,
+    target_handicap: str,
+    custom_putts: float | None = None,
+    custom_gir: float | None = None,
+    custom_fairways: float | None = None,
+):
+    client.table("user_settings").upsert({
+        "user_id": user_id,
+        "target_handicap": target_handicap,
+        "custom_putts_per_round": custom_putts,
+        "custom_gir_pct": custom_gir,
+        "custom_fairways_hit_pct": custom_fairways,
+    }).execute()
